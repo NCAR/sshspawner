@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from traitlets import Bool, Unicode, Integer, List, observe, default
 from jupyterhub.spawner import Spawner
 
+#import pdb
 
 class SSHSpawner(Spawner):
 
@@ -251,6 +252,37 @@ class SSHSpawner(Spawner):
         cf = kf + "-cert.pub"
         k = asyncssh.read_private_key(kf)
         c = asyncssh.read_certificate(cf)
+
+        #pdb.set_trace()
+
+	# Wrapspawner amendment
+        client_id = env["JUPYTERHUB_CLIENT_ID"]
+        client_id_list = client_id.split("-")
+        user = client_id_list[2]
+        base_url = env["JUPYTERHUB_BASE_URL"].strip("/")
+        #service_prefix = "/{base_url}/user/{user}/".format(user=user, base_url=base_url)
+        service_prefix = self.user.base_url
+        #if base_url == "dev":
+        #    api_port = "8802"  # Dev port
+        #else: 
+        #    api_port = "8502"  # Stable port
+        #env['JUPYTERHUB_API_URL']="http://128.117.211.243:{api_port}/{base_url}/hub/api".format(base_url=base_url, api_port=api_port)
+        env['JUPYTERHUB_API_URL'] = self.hub.api_url
+        if len(client_id_list) == 4: # If named server
+            named_server = client_id_list[3]
+            service_prefix = service_prefix + "{named_server}/".format(
+              named_server=named_server
+            )
+        env["JUPYTERHUB_SERVICE_PREFIX"] = service_prefix
+        env["JUPYTERHUB_OAUTH_CALLBACK_URL"] = service_prefix + "oauth_callback"
+        command = "{command} --ip={ip} --port={port}".format(
+          command = command,
+          ip = self.remote_ip,
+          port = self.remote_port
+        )
+
+	# end wrapspawner amendment
+
         bash_script_str = "#!/bin/bash\n"
 
         for item in env.items():
@@ -258,10 +290,23 @@ class SSHSpawner(Spawner):
             # command = ('export %s=%s;' % item) + command
             bash_script_str += 'export %s=%s\n' % item
         bash_script_str += 'unset XDG_RUNTIME_DIR\n'
+        
 
-        bash_script_str += 'touch .jupyter.log\n'
-        bash_script_str += 'chmod 600 .jupyter.log\n'
-        bash_script_str += '%s < /dev/null >> .jupyter.log 2>&1 & pid=$!\n' % command
+        logdir = '/glade/scratch/{user}/.jupyter_logs'.format(user=self.user.name)
+        if len(client_id_list) == 4: # If named server
+            log_file = '{logdir}/jupyter.{named_server}.log'.format(logdir=logdir,named_server=named_server)
+        else:
+            log_file = '{logdir}/jupyter.default.log'.format(logdir=logdir)
+             
+
+        bash_script_str += 'mkdir -p $(dirname {log_file})\n'.format(log_file=log_file)
+        bash_script_str += 'touch {log_file}\n'.format(log_file=log_file)
+        bash_script_str += 'chmod 600 {log_file}\n'.format(log_file=log_file)
+        bash_script_str += '[ -f {sitefile} ] && . {sitefile} >> {log_file} 2>&1\n'.format(
+          sitefile='/ncar/usr/jupyterhub.hpc.ucar.edu/etc/{base_url}.sh'.format(base_url=base_url),
+          log_file=log_file
+        ) 
+        bash_script_str += '{command} < /dev/null >> {log_file} 2>&1 & pid=$!\n'.format(command=command, log_file=log_file)
         bash_script_str += 'echo $pid\n'
 
         run_script = "/tmp/{}_run.sh".format(self.user.name)
@@ -274,7 +319,7 @@ class SSHSpawner(Spawner):
                 self.log.debug(run_script + " was written as:\n" + f.read())
 
         async with asyncssh.connect(self.remote_ip, username=username,client_keys=[(k,c)],known_hosts=None) as conn:
-            result = await conn.run("bash -s", stdin=run_script)
+            result = await conn.run("bash --noprofile --norc -s", stdin=run_script)
             stdout = result.stdout
             stderr = result.stderr
             retcode = result.exit_status
