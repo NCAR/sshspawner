@@ -246,8 +246,8 @@ class SSHSpawner(Spawner):
 
         env = super(SSHSpawner, self).get_env()
         env['JUPYTERHUB_API_URL'] = self.hub_api_url
-        if self.path:
-            env['PATH'] = self.path
+        #if self.path:
+        #    env['PATH'] = self.path
         username = self.get_remote_user(self.user.name)
         kf = self.ssh_keyfile.format(username=username)
         cf = kf + "-cert.pub"
@@ -300,14 +300,20 @@ class SSHSpawner(Spawner):
             log_file = '{logdir}/jupyter.default.log'.format(logdir=logdir)
              
 
+        jupyterhub_prefix = f'/ncar/usr/jupyterhub.hpc.ucar.edu/{base_url}'
+
         bash_script_str += 'mkdir -p $(dirname {log_file})\n'.format(log_file=log_file)
         bash_script_str += 'touch {log_file}\n'.format(log_file=log_file)
         bash_script_str += 'chmod 600 {log_file}\n'.format(log_file=log_file)
         bash_script_str += '[ -f {sitefile} ] && . {sitefile} >> {log_file} 2>&1\n'.format(
-          sitefile='/ncar/usr/jupyterhub.hpc.ucar.edu/etc/{base_url}.sh'.format(base_url=base_url),
+          sitefile='/ncar/usr/jupyterhub.hpc.ucar.edu/{base_url}/etc/jupyterhub/jupyterhub-rc.sh'.format(base_url=base_url),
           log_file=log_file
         ) 
-        bash_script_str += '{command} < /dev/null >> {log_file} 2>&1 & pid=$!\n'.format(command=command, log_file=log_file)
+        bash_script_str += '{jupyterhub_prefix}/bin/{command} < /dev/null >> {log_file} 2>&1 & pid=$!\n'.format(
+          jupyterhub_prefix=jupyterhub_prefix,
+          command=command,
+          log_file=log_file
+        )
         bash_script_str += 'echo $pid\n'
 
         run_script = "/tmp/{}_run.sh".format(self.user.name)
