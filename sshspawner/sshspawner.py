@@ -348,7 +348,7 @@ class SSHSpawner(Spawner):
         k = asyncssh.read_private_key(kf)
         c = asyncssh.read_certificate(cf)
 
-        command = "kill -s %s %d < /dev/null"  % (sig, self.pid)
+        command = "/usr/bin/kill -s %s %d < /dev/null"  % (sig, self.pid)
 
         async with asyncssh.connect(self.remote_ip, username=username,client_keys=[(k,c)],known_hosts=None) as conn:
             result = await conn.run(command)
