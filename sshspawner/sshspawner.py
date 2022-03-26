@@ -276,9 +276,10 @@ class SSHSpawner(Spawner):
             )
         env["JUPYTERHUB_SERVICE_PREFIX"] = service_prefix
         env["JUPYTERHUB_OAUTH_CALLBACK_URL"] = service_prefix + "oauth_callback"
-        command = "{command} --ip={ip} --port={port}".format(
+        #command = "{command} --ip={ip} --port={port}".format(
+	command = "{command} --ip={ip}".format(
           command = command,
-          ip = self.remote_ip,
+          #ip = self.remote_ip,
           port = self.remote_port
         )
 
